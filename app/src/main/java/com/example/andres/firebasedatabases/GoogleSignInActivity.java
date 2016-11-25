@@ -8,6 +8,15 @@ import android.util.Log;
 import android.view.View;
 import android.widget.Toast;
 
+import com.facebook.AccessToken;
+import com.facebook.CallbackManager;
+import com.facebook.FacebookCallback;
+import com.facebook.FacebookException;
+import com.facebook.FacebookSdk;
+import com.facebook.appevents.AppEventsLogger;
+import com.facebook.login.LoginManager;
+import com.facebook.login.LoginResult;
+import com.facebook.login.widget.LoginButton;
 import com.google.android.gms.auth.api.Auth;
 import com.google.android.gms.auth.api.signin.GoogleSignInAccount;
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions;
@@ -19,6 +28,7 @@ import com.google.android.gms.tasks.OnCompleteListener;
 import com.google.android.gms.tasks.Task;
 import com.google.firebase.auth.AuthCredential;
 import com.google.firebase.auth.AuthResult;
+import com.google.firebase.auth.FacebookAuthProvider;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.auth.GoogleAuthProvider;
@@ -30,12 +40,16 @@ import com.twitter.sdk.android.core.TwitterException;
 import com.twitter.sdk.android.core.TwitterSession;
 import com.twitter.sdk.android.core.identity.TwitterLoginButton;
 
+import java.util.Arrays;
+
 import io.fabric.sdk.android.Fabric;
 
 public class GoogleSignInActivity extends AppCompatActivity implements GoogleApiClient.OnConnectionFailedListener {
 
     private static final String TAG = "GoogleActivity";
     private static final int RC_SIGN_IN = 9001;
+    private static final int RC_TWITTER_SIGNUP = 140;
+    private static final int RC_FACEBOOK_SIGNUP = 64206;
 
     private SignInButton signInButton;
     private TwitterLoginButton mLoginButton;
@@ -47,6 +61,9 @@ public class GoogleSignInActivity extends AppCompatActivity implements GoogleApi
     private FirebaseAuth.AuthStateListener mAuthListener;
     // [END declare_auth_listener]
 
+    private LoginButton mLoginButtonFacebook;
+    private CallbackManager callbackManager;
+
     public static void show(AppCompatActivity appCompatActivity) {
         appCompatActivity.startActivity(new Intent(appCompatActivity, GoogleSignInActivity.class));
     }
@@ -54,7 +71,9 @@ public class GoogleSignInActivity extends AppCompatActivity implements GoogleApi
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        FacebookSdk.sdkInitialize(getApplicationContext());
         setContentView(R.layout.activity_google_sign_in);
+        // TODO GOOGLE LOGIN
 
         // [START config_signin]
         // Configure Google Sign In
@@ -101,6 +120,7 @@ public class GoogleSignInActivity extends AppCompatActivity implements GoogleApi
             }
         };
         // [END auth_state_listener]
+        // TODO TWITTER LOGIN
 
         //Twitter
         // Configure Twitter SDK
@@ -138,6 +158,43 @@ public class GoogleSignInActivity extends AppCompatActivity implements GoogleApi
             }*/
         });
 // [END initialize_twitter_login]
+
+        // TODO FACEBOOK LOGIN
+        AppEventsLogger.activateApp(this.getApplication());
+
+        mLoginButtonFacebook = (LoginButton) findViewById(R.id.login_button);
+        mLoginButtonFacebook.setReadPermissions("email");
+        // If using in a fragment
+        //mLoginButtonFacebook.setFragment(this);
+        // Other app specific specialization
+
+        // Callback registration
+        callbackManager = CallbackManager.Factory.create();
+
+        mLoginButtonFacebook.registerCallback(callbackManager, new FacebookCallback<LoginResult>() {
+            @Override
+            public void onSuccess(LoginResult loginResult) {
+                // App code
+                handleFacebookAccessToken(loginResult.getAccessToken());
+            }
+
+            @Override
+            public void onCancel() {
+                Log.d(TAG, "facebook:onCancel");
+            }
+
+            @Override
+            public void onError(FacebookException exception) {
+                Log.d(TAG, "facebook:onError", exception);
+            }
+        });
+
+        mLoginButtonFacebook.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                LoginManager.getInstance().logInWithReadPermissions(GoogleSignInActivity.this, Arrays.asList("public_profile"));
+            }
+        });
     }
 
     // [START auth_with_twitter]
@@ -196,9 +253,12 @@ public class GoogleSignInActivity extends AppCompatActivity implements GoogleApi
                 updateUI(null);
                 // [END_EXCLUDE]
             }
-        }else
+        }else if(requestCode == RC_TWITTER_SIGNUP ) {
             // Pass the activity result to the Twitter login button.
             mLoginButton.onActivityResult(requestCode, resultCode, data);
+        }else if(requestCode == RC_FACEBOOK_SIGNUP ){
+            callbackManager.onActivityResult(requestCode,resultCode,data);
+        }
     }
     // [END onactivityresult]
 
@@ -266,5 +326,28 @@ public class GoogleSignInActivity extends AppCompatActivity implements GoogleApi
             findViewById(R.id.sign_out_and_disconnect).setVisibility(View.GONE);*/
     }
 
+    private void handleFacebookAccessToken(AccessToken token) {
+        Log.d(TAG, "handleFacebookAccessToken:" + token);
+
+        AuthCredential credential = FacebookAuthProvider.getCredential(token.getToken());
+        mAuth.signInWithCredential(credential)
+                .addOnCompleteListener(this, new OnCompleteListener<AuthResult>() {
+                    @Override
+                    public void onComplete(@NonNull Task<AuthResult> task) {
+                        Log.d(TAG, "signInWithCredential:onComplete:" + task.isSuccessful());
+
+                        // If sign in fails, display a message to the user. If sign in succeeds
+                        // the auth state listener will be notified and logic to handle the
+                        // signed in user can be handled in the listener.
+                        if (!task.isSuccessful()) {
+                            Log.w(TAG, "signInWithCredential", task.getException());
+                            Toast.makeText(GoogleSignInActivity.this, "Authentication failed.",
+                                    Toast.LENGTH_SHORT).show();
+                        }
+
+                        // ...
+                    }
+                });
+    }
 
 }
